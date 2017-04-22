@@ -27,7 +27,7 @@ html, body, #root
 .card-wrapper
   display: block
   background: white
-  padding: 2em
+  padding: 1em
   border-radius: 4px
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.24)
   transition: all 0.3s cubic-bezier(.25, .8, .25, 1)
@@ -42,6 +42,7 @@ html, body, #root
     display: flex
 
 .loading-container
+  width: 100%
   display: flex
   justify-content: center
 
@@ -49,6 +50,7 @@ html, body, #root
   width: 100%
   display: flex
   align-items: center
+  padding: 1em
 
   input
     flex: 1
@@ -61,3 +63,26 @@ html, body, #root
     margin-left: .5em
     box-sizing: border-box
     font-size: 2em
+
+blockquote.twitter-tweet
+  display: inline-block
+  font-family: "Helvetica Neue", Roboto, "Segoe UI", Calibri, sans-serif
+  font-size: 12px
+  font-weight: bold
+  line-height: 16px
+
+blockquote.twitter-tweet p
+  font-size: 16px
+  font-weight: normal
+  line-height: 20px
+
+blockquote.twitter-tweet a
+  color: inherit
+  font-weight: normal
+  text-decoration: none
+  outline: 0 none
+
+blockquote.twitter-tweet a:hover,
+blockquote.twitter-tweet a:focus
+  text-decoration: underline
+
