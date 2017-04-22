@@ -5,9 +5,10 @@ import request from 'browser-request';
 import { HorizontalBar } from 'react-chartjs-2';
 
 class App extends React.Component {
+
   constructor(props) {
     super(props);
-
+    this.queue = [];
     this.state = {
       keyword: '',
       tonesList: null,
@@ -45,12 +46,34 @@ class App extends React.Component {
           tonesList[category_name].datasets[0].data.push(score);
         });
       });
+      //console.log(tonesList);
+      this.queue = [];
+      tonesList && Object.keys(tonesList).forEach((category_name, i) => (
+          this.queue.unshift(<Card key={this.queue.length}><h4>{this.state.keyword}</h4><HorizontalBar data = {tonesList[category_name]}/></Card>)
+      ));
       this.setState({ tonesList });
+
+
     });
+
+
+  }
+
+  download(filename, text) {
+    var element = document.createElement('a');
+    element.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(text));
+    element.setAttribute('download', filename);
+
+    element.style.display = 'none';
+    document.body.appendChild(element);
+
+    element.click();
+
+    document.body.removeChild(element);
   }
 
   render() {
-    const { tonesList } = this.state;
+    console.log(this.queue);
     return (
       <div className="card-container">
         <Card>
@@ -65,15 +88,14 @@ class App extends React.Component {
             <span>Loading...</span>
           </div>
         </Card>
-        {
-          tonesList && Object.keys(tonesList).map((category_name, i) => (
-            <Card key={i}>
-              <HorizontalBar
-                data={tonesList[category_name]}
-              />
-            </Card>
-          ))
-        }
+          {
+            this.queue
+          }
+        <Card>
+          <div className="csv-container">
+            <a onClick={() => this.download("data.csv","1, 2, 3")}>data.csv</a>
+          </div>
+        </Card>
       </div>
     );
   }
