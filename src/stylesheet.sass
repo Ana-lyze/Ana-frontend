@@ -1,17 +1,19 @@
 $primary-color: #bb5760
 $secondary-color: #eb6e7b
-$tertiary-color: #ff7888
+$tertiary-color: #52D2D6
 
 html, body, #root
   width: 100%
   height: 100%
   margin: 0
   padding: 0
+  overflow: scroll
 
 #root
   background: $tertiary-color
   display: flex
   justify-content: center
+  font-family: sans-serif
 
 .card-container
   height: 100%
@@ -38,6 +40,10 @@ html, body, #root
   .card
     width: 100%
     display: flex
+
+.loading-container
+  display: flex
+  justify-content: center
 
 .search-container
   width: 100%

@@ -2,7 +2,7 @@ import React from 'react';
 import '../stylesheet.sass';
 import Card from './Card.jsx';
 import request from 'browser-request';
-import { BarChart } from 'react-easy-chart';
+import { HorizontalBar } from 'react-chartjs-2';
 
 class App extends React.Component {
   constructor(props) {
@@ -11,6 +11,7 @@ class App extends React.Component {
     this.state = {
       keyword: '',
       tonesList: null,
+      loading: false,
     };
 
     this.handleInputChange = this.handleInputChange.bind(this);
@@ -31,9 +32,17 @@ class App extends React.Component {
     }, (err, res, { tone_categories }) => {
       const tonesList = {};
       tone_categories.forEach(({ tones, category_name }) => {
-        tonesList[category_name] = [];
+        tonesList[category_name] = {
+          labels: [],
+          datasets: [{
+            label: category_name,
+            backgroundColor: '#30CCB6',
+            data: [],
+          }],
+        };
         tones.forEach(({ score, tone_name }) => {
-          tonesList[category_name].push({ name: tone_name, value: score });
+          tonesList[category_name].labels.push(tone_name);
+          tonesList[category_name].datasets[0].data.push(score);
         });
       });
       this.setState({ tonesList });
@@ -42,7 +51,6 @@ class App extends React.Component {
 
   render() {
     const { tonesList } = this.state;
-    console.log(tonesList);
     return (
       <div className="card-container">
         <Card>
@@ -51,10 +59,16 @@ class App extends React.Component {
             <i className="fa fa-search" aria-hidden="true" onClick={this.handleSearchClick} />
           </div>
         </Card>
+        <Card>
+          <div className="loading-container">
+            <i className="fa fa-spinner fa-spin" aria-hidden="true" />
+            <span>Loading...</span>
+          </div>
+        </Card>
         {
           tonesList && Object.keys(tonesList).map((category_name, i) => (
             <Card key={i}>
-              <BarChart
+              <HorizontalBar
                 data={tonesList[category_name]}
               />
             </Card>
