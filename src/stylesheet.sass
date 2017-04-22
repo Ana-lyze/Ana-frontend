@@ -40,6 +40,15 @@ html, body, #root
   .card
     width: 100%
     display: flex
+    align-items: center
+
+    &.vertical
+      flex-direction: column
+
+.chart-wrapper
+  width: 100%
+  display: flex
+  padding: 1em
 
 .loading-container
   width: 100%
@@ -86,3 +95,7 @@ blockquote.twitter-tweet a:hover,
 blockquote.twitter-tweet a:focus
   text-decoration: underline
 
+.csv-container
+  max-width: 15em
+  height: 70%
+  justify-content: center

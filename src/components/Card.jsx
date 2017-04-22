@@ -4,7 +4,7 @@ class Card extends React.Component {
   render() {
     return (
       <div className="card-wrapper">
-        <div className="card">
+        <div className={`card ${this.props.vertical ? 'vertical' : null}`}>
           {this.props.children}
         </div>
       </div>

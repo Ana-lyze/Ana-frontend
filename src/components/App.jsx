@@ -11,7 +11,7 @@ class App extends React.Component {
 
     this.state = {
       keyword: '',
-      tonesList: null,
+      tonesList: {},
       loading: false,
       posts: null,
     };
@@ -25,15 +25,16 @@ class App extends React.Component {
   }
 
   handleSearchClick() {
+    const { keyword } = this.state;
+    const color = `hsl(${Math.random() * 360}, 50%, 50%)`;
     this.setState({
-      tonesList: null,
       loading: false,
       posts: [],
     });
     async.waterfall([
       (cb) => {
         reqwest({
-          url: `http://localhost:8000/?q=${this.state.keyword}`,
+          url: `http://localhost:8000/?q=${keyword}`,
           type: 'json',
           error: cb,
           success: cb.bind(this, null),
@@ -51,20 +52,26 @@ class App extends React.Component {
               error: cb,
               success: (body) => {
                 const { tone_categories } = body;
-                const tonesList = {};
+                const tonesList = { ...this.state.tonesList };
                 tone_categories.forEach(({ tones, category_name }) => {
-                  tonesList[category_name] = {
-                    labels: [],
-                    datasets: [{
-                      label: category_name,
-                      backgroundColor: '#30CCB6',
-                      data: [],
-                    }],
+                  if (!tonesList[category_name]) {
+                    tonesList[category_name] = {
+                      labels: [],
+                      datasets: [],
+                    };
+                    tones.forEach(({ tone_name }) => {
+                      tonesList[category_name].labels.push(tone_name);
+                    });
+                  }
+                  const dataset = {
+                    label: keyword,
+                    backgroundColor: color,
+                    data: [],
                   };
-                  tones.forEach(({ score, tone_name }) => {
-                    tonesList[category_name].labels.push(tone_name);
-                    tonesList[category_name].datasets[0].data.push(score);
+                  tones.forEach(({ score }) => {
+                    dataset.data.push(score);
                   });
+                  tonesList[category_name].datasets.push(dataset);
                 });
                 this.setState({ tonesList });
                 cb();
@@ -96,6 +103,19 @@ class App extends React.Component {
     });
   }
 
+  download(filename, text) {
+    var element = document.createElement('a');
+    element.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(text));
+    element.setAttribute('download', filename);
+
+    element.style.display = 'none';
+    document.body.appendChild(element);
+
+    element.click();
+
+    document.body.removeChild(element);
+  }
+
   render() {
     const { tonesList, loading, posts } = this.state;
     return (
@@ -118,11 +138,19 @@ class App extends React.Component {
         {
           tonesList &&
           Object.keys(tonesList).map((category_name, i) => (
-            <Card key={i}>
-              <HorizontalBar data={tonesList[category_name]} />
+            <Card key={i} vertical>
+              <h2>{category_name}</h2>
+              <div className="chart-wrapper">
+                <HorizontalBar data={tonesList[category_name]} />
+              </div>
             </Card>
           ))
         }
+        <Card>
+          <div className="csv-container">
+            <a onClick={() => this.download("data.csv", "1, 2, 3")}>data.csv</a>
+          </div>
+        </Card>
         {
           this.state.posts
         }
