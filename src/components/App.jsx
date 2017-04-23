@@ -5,6 +5,7 @@ import reqwest from 'reqwest';
 import { HorizontalBar, defaults } from 'react-chartjs-2';
 import async from 'async';
 import extend from 'extend';
+import TweetEmbed from 'react-tweet-embed';
 
 defaults.global.legend.display = false;
 
@@ -17,7 +18,6 @@ class App extends React.Component {
       loading: false,
       data: []
     };
-    this.csv_data = undefined;
 
     this.state = { ...this.initialState };
 
@@ -65,8 +65,12 @@ class App extends React.Component {
           success: cb.bind(this, null),
         });
       },
-      (statuses, cb) => {
-        const text = statuses.reduce((text, status) => text + ' ' + status.text, '');
+      ({ twitter, reddit }, cb) => {
+        console.log(reddit);
+        const text =
+          twitter.reduce((text, post) => text + ' ' + post.text, '')
+          + '' +
+          reddit.reduce((text, post) => text + ' ' + post.title, '');
         async.parallel([
           (cb) => {
             reqwest({
@@ -94,25 +98,19 @@ class App extends React.Component {
               },
             });
           },
-          ...statuses.map(({ user: { screen_name }, id_str }) => (cb) => {
-            reqwest({
-              url: `https://publish.twitter.com/oembed?url=https%3A%2F%2Ftwitter.com%2F${screen_name}%2Fstatus%2F${id_str}`,
-              type: 'jsonp',
-              error: cb,
-              success: ({ html }) => {
-                this.setState((state) => {
-                  const data = [...state.data];
-                  const index = data.findIndex(o => o.keyword === keyword);
-                  if (!~index) return {};
-                  const datum = extend(true, {}, data[index]);
-                  data[index] = datum;
-                  datum.posts.push({ html, id_str });
-                  return { data };
-                });
-                cb();
-              }
+          (cb) => {
+            this.setState((state) => {
+              const data = [...state.data];
+              const index = data.findIndex(o => o.keyword === keyword);
+              if (!~index) return {};
+              const datum = extend(true, {}, data[index]);
+              data[index] = datum;
+              datum.posts.push(...reddit.map(({ permalink, title, created }) => ({ type: 'reddit', permalink, title, created })));
+              datum.posts.push(...twitter.map(({ id_str }) => ({ type: 'twitter', id_str })));
+              return { data };
             });
-          })
+            cb();
+          },
         ], cb);
       },
     ], (err) => {
@@ -130,35 +128,35 @@ class App extends React.Component {
     this.setState({ data });
   }
 
-  download(filename, text) {
-    let element = document.createElement('a');
-    element.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(text));
-    element.setAttribute('download', filename);
+  download(filename) {
+    if (this.state.data.every(({ chart }) => Object.keys(chart).length)) {
+      let element = document.createElement('a');
+      element.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(this.generateCSV()));
+      element.setAttribute('download', filename);
 
-    element.style.display = 'none';
-    document.body.appendChild(element);
+      element.style.display = 'none';
+      document.body.appendChild(element);
 
-    element.click();
+      element.click();
 
-    document.body.removeChild(element);
+      document.body.removeChild(element);
+    }
   }
 
   generateCSV() {
-    const {tonesList} = this.state;
-    let csv_data = "";
-    let num_data = tonesList[Object.keys(tonesList)[0]].datasets.length;
-    for(let i = 0; i < num_data; i++) {
-      csv_data += tonesList[Object.keys(tonesList)[0]].datasets[i].label;
-
-      for(let j = 0; j < tonesList[Object.keys(tonesList)[0]].datasets[i].data.length; j++) {
-        csv_data += ", "+tonesList[Object.keys(tonesList)[0]].labels[j]+", "+tonesList[Object.keys(tonesList)[0]].datasets[i].data[j];
-      }for(let j = 0; j < tonesList[Object.keys(tonesList)[1]].datasets[i].data.length; j++) {
-        csv_data += ", "+tonesList[Object.keys(tonesList)[1]].labels[j]+", "+tonesList[Object.keys(tonesList)[1]].datasets[i].data[j];
-      }for(let j = 0; j < tonesList[Object.keys(tonesList)[2]].datasets[i].data.length; j++) {
-        csv_data += ", "+tonesList[Object.keys(tonesList)[2]].labels[j]+", "+tonesList[Object.keys(tonesList)[2]].datasets[i].data[j];
-      }
-
-      if(i != num_data-1) csv_data += ", \n";
+    const { data } = this.state;
+    let csv_data = '';
+    const num_data = data.length;
+    Object.keys(data[0].chart).forEach((category_name) => {
+      csv_data += ',' + data[0].chart[category_name].labels.join(',');
+    });
+    csv_data += '\n';
+    for (let i = 0; i < num_data; i++) {
+      csv_data += data[i].keyword;
+      Object.keys(data[i].chart).forEach((category_name) => {
+        csv_data += ',' + data[i].chart[category_name].data.join(',');
+      });
+      csv_data += '\n';
     }
     return csv_data;
   }
@@ -167,26 +165,39 @@ class App extends React.Component {
     const { loading, data } = this.state;
     const posts = [];
     data.forEach((datum) => {
-      posts.push(...datum.posts.map(({ html, id_str }) => (
-        <Card key={id_str}>
-          <div dangerouslySetInnerHTML={{ __html: html }} />
-        </Card>
+      posts.push(...datum.posts.map(({ type, id_str, permalink, title, created }) => (
+        type === 'twitter' ?
+          <TweetEmbed id={id_str} key={id_str} /> : [
+          <blockquote className="reddit-card" data-card-created={created}>
+            <a href={permalink}>{title}</a> from <a
+            href="http://www.reddit.com/r/worldnews">worldnews</a></blockquote>,
+          <script async src="//embed.redditmedia.com/widgets/platform.js" charset="UTF-8"></script>
+        ]
       )));
     });
     return (
-      <div className="card-container">
+      <div className='card-container'>
         <Card>
-          <div className="search-container">
-            <input type="text" defaultValue={this.state.keyword} onChange={this.handleInputChange}
+          <div className='search-container'>
+            <input type='text' defaultValue={this.state.keyword} onChange={this.handleInputChange}
                    onKeyPress={this.handleKeyPress} />
-            <i className="fa fa-search" aria-hidden="true" onClick={this.handleSearchClick} />
+            <i className='fa fa-search' aria-hidden='true' onClick={this.handleSearchClick} />
           </div>
         </Card>
-        <div className="keyword-list">
+        <div className='keyword-list'>
           {
             data.length ?
-              <Card>
-                <div onClick={this.handleClearClick} className="clear-container">
+              <Card onClick={() => this.download('data.csv')}>
+                <div className='csv-container'>
+                  CSV
+                </div>
+              </Card> :
+              null
+          }
+          {
+            data.length ?
+              <Card onClick={this.handleClearClick}>
+                <div>
                   Clear
                 </div>
               </Card> :
@@ -195,8 +206,10 @@ class App extends React.Component {
           {
             data.map(({ keyword, color }, i) => (
               <Card key={`keyword-${i}`} color={color} white>
-                <div>{keyword}</div>
-                <i className="fa fa-times" aria-hidden="true" onClick={() => this.remove(i)} />
+                <div>
+                  {keyword}
+                </div>
+                <i className='fa fa-times' aria-hidden='true' onClick={() => this.remove(i)} />
               </Card>
             ))
           }
@@ -204,8 +217,8 @@ class App extends React.Component {
         {
           loading &&
           <Card>
-            <div className="loading-container">
-              <i className="fa fa-spinner fa-spin" aria-hidden="true" />
+            <div className='loading-container'>
+              <i className='fa fa-spinner fa-spin' aria-hidden='true' />
               <span>&nbsp;Loading...</span>
             </div>
           </Card>
@@ -216,7 +229,7 @@ class App extends React.Component {
               .map((category_name, i) => (
                 <Card key={`chart-${i}`} vertical>
                   <h2>{category_name}</h2>
-                  <div className="chart-wrapper">
+                  <div className='chart-wrapper'>
                     {
                       <HorizontalBar data={{
                         labels: data[0].chart[category_name].labels,
@@ -233,14 +246,6 @@ class App extends React.Component {
                 </Card>
               )) :
             null
-        }
-        {
-          Object.keys(this.state.tonesList).length==0||
-          <Card>
-            <div className="csv-container">
-              <a onClick={() => this.download("data.csv", this.generateCSV())}>CSV</a>
-            </div>
-          </Card>
         }
         {
           posts.reverse()
