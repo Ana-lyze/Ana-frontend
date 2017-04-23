@@ -15,6 +15,7 @@ class App extends React.Component {
       loading: false,
       posts: null,
     };
+    this.csv_data = undefined;
 
     this.handleInputChange = this.handleInputChange.bind(this);
     this.handleSearchClick = this.handleSearchClick.bind(this);
@@ -104,7 +105,7 @@ class App extends React.Component {
   }
 
   download(filename, text) {
-    var element = document.createElement('a');
+    let element = document.createElement('a');
     element.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(text));
     element.setAttribute('download', filename);
 
@@ -114,6 +115,26 @@ class App extends React.Component {
     element.click();
 
     document.body.removeChild(element);
+  }
+
+  generateCSV() {
+    const {tonesList} = this.state;
+    let csv_data = "";
+    let num_data = tonesList[Object.keys(tonesList)[0]].datasets.length;
+    for(let i = 0; i < num_data; i++) {
+      csv_data += tonesList[Object.keys(tonesList)[0]].datasets[i].label;
+
+      for(let j = 0; j < tonesList[Object.keys(tonesList)[0]].datasets[i].data.length; j++) {
+        csv_data += ", "+tonesList[Object.keys(tonesList)[0]].labels[j]+", "+tonesList[Object.keys(tonesList)[0]].datasets[i].data[j];
+      }for(let j = 0; j < tonesList[Object.keys(tonesList)[1]].datasets[i].data.length; j++) {
+        csv_data += ", "+tonesList[Object.keys(tonesList)[1]].labels[j]+", "+tonesList[Object.keys(tonesList)[1]].datasets[i].data[j];
+      }for(let j = 0; j < tonesList[Object.keys(tonesList)[2]].datasets[i].data.length; j++) {
+        csv_data += ", "+tonesList[Object.keys(tonesList)[2]].labels[j]+", "+tonesList[Object.keys(tonesList)[2]].datasets[i].data[j];
+      }
+
+      if(i != num_data-1) csv_data += ", \n";
+    }
+    return csv_data;
   }
 
   render() {
@@ -146,11 +167,13 @@ class App extends React.Component {
             </Card>
           ))
         }
-        <Card>
-          <div className="csv-container">
-            <a onClick={() => this.download("data.csv", "1, 2, 3")}>data.csv</a>
-          </div>
-        </Card>
+        {
+          <Card>
+            <div className="csv-container">
+              <a onClick={() => this.download("data.csv", this.generateCSV())}>data.csv</a>
+            </div>
+          </Card>
+        }
         {
           this.state.posts
         }
