@@ -5,9 +5,18 @@ import reqwest from 'reqwest';
 import { HorizontalBar, defaults } from 'react-chartjs-2';
 import async from 'async';
 import extend from 'extend';
-import TweetEmbed from 'react-tweet-embed';
+import moment from 'moment';
+import Highlighter from 'react-highlight-words';
 
 defaults.global.legend.display = false;
+
+const shuffle = (array) => {
+  const randomized = [];
+  for (let i = array.length - 1; i >= 0; i--) {
+    randomized.push(...array.splice(Math.random() * i | 0, 1));
+  }
+  return randomized;
+};
 
 class App extends React.Component {
   constructor(props) {
@@ -15,8 +24,12 @@ class App extends React.Component {
 
     this.initialState = {
       keyword: '',
-      loading: false,
-      data: []
+      progress: {
+        current: 0,
+        total: 1
+      },
+      data: [],
+      selected: null,
     };
 
     this.state = { ...this.initialState };
@@ -25,6 +38,22 @@ class App extends React.Component {
     this.handleSearchClick = this.handleSearchClick.bind(this);
     this.handleKeyPress = this.handleKeyPress.bind(this);
     this.handleClearClick = this.handleClearClick.bind(this);
+  }
+
+  resetProgress(total = 0) {
+    document.getElementById('progress').style.width = total ? '0%' : '100%';
+    document.getElementById('progress').style.opacity = total ? '1' : '0';
+    this.setState({ progress: { current: 0, total } });
+  }
+
+  progress() {
+    this.setState((state) => {
+      const progress = { ...state.progress };
+      progress.current++;
+      const percent = progress.current / progress.total;
+      document.getElementById('progress').style.width = `${percent * 100}%`;
+      return { progress };
+    });
   }
 
   handleInputChange({ target }) {
@@ -47,15 +76,19 @@ class App extends React.Component {
     } while (hues.some(v => Math.abs(hue - v) < 30));
     const color = `hsl(${hue}, 50%, 50%)`;
     this.setState((state) => ({
+      keyword: '',
       data: [...state.data, {
         keyword,
         hue,
         color,
         chart: {},
         posts: [],
+        keywords: [],
       }],
-      loading: true,
+      selected: null,
     }));
+    this.resetProgress(5);
+    this.progress();
     async.waterfall([
       (cb) => {
         reqwest({
@@ -66,7 +99,7 @@ class App extends React.Component {
         });
       },
       ({ twitter, reddit }, cb) => {
-        console.log(reddit);
+        this.progress();
         const text =
           twitter.reduce((text, post) => text + ' ' + post.text, '')
           + '' +
@@ -75,7 +108,7 @@ class App extends React.Component {
           (cb) => {
             reqwest({
               method: 'post',
-              url: 'http://localhost:8000/',
+              url: 'http://localhost:8000/tone',
               type: 'json',
               data: { text },
               error: cb,
@@ -94,6 +127,7 @@ class App extends React.Component {
                   });
                   return { data };
                 });
+                this.progress();
                 cb();
               },
             });
@@ -105,27 +139,56 @@ class App extends React.Component {
               if (!~index) return {};
               const datum = extend(true, {}, data[index]);
               data[index] = datum;
-              datum.posts.push(...reddit.map(({ permalink, title, created }) => ({ type: 'reddit', permalink, title, created })));
-              datum.posts.push(...twitter.map(({ id_str }) => ({ type: 'twitter', id_str })));
+              datum.posts.push(...twitter.map((post) => ({ type: 'twitter', post })));
+              datum.posts.push(...reddit.map((post) => ({ type: 'reddit', post })));
+              datum.posts = shuffle(datum.posts);
               return { data };
             });
+            this.progress();
             cb();
           },
+          (cb) => {
+            reqwest({
+              method: 'post',
+              url: 'http://localhost:8000/keyword',
+              type: 'json',
+              data: { text },
+              error: cb,
+              success: ({ keywords }) => {
+                this.setState((state) => {
+                  const data = [...state.data];
+                  const index = data.findIndex(o => o.keyword === keyword);
+                  if (!~index) return {};
+                  const datum = extend(true, {}, data[index]);
+                  data[index] = datum;
+                  datum.keywords = keywords;
+                  return { data };
+                });
+                this.progress();
+                cb();
+              },
+            });
+          }
         ], cb);
       },
     ], (err) => {
-      this.setState({ loading: false });
+      this.resetProgress();
     });
   }
 
   handleClearClick() {
-    this.setState({ data: [] });
+    this.setState({ data: [], selected: null });
   }
 
   remove(i) {
     const data = [...this.state.data];
     data.splice(i, 1);
-    this.setState({ data });
+    this.setState({ data, selected: null });
+  }
+
+  filter(selected) {
+    if (selected === this.state.selected) selected = null;
+    this.setState({ selected });
   }
 
   download(filename) {
@@ -162,22 +225,48 @@ class App extends React.Component {
   }
 
   render() {
-    const { loading, data } = this.state;
+    const { data, selected } = this.state;
     const posts = [];
     data.forEach((datum) => {
-      posts.push(...datum.posts.map(({ type, id_str, permalink, title, created }) => (
-        type === 'twitter' ?
-          <TweetEmbed id={id_str} key={id_str} /> : [
-          <Card><blockquote className="reddit-card" data-card-created={created}>
-            <a href={permalink}>{title}</a></blockquote></Card>
-        ]
-      )));
+      posts.push(...datum.posts.map(({ type, post }, i) => {
+        const twitter = type === 'twitter';
+        const text = twitter ? post.text : post.title;
+        if (selected && !new RegExp(`\\b${selected}\\b`, 'im').test(text)) return;
+        return (
+          <a href={twitter ?
+            `https://twitter.com/${post.user.screen_name}/status/${post.id_str}` :
+            `https://www.reddit.com${post.permalink}`}
+             className='reddit-card-wrapper' target='_blank' key={`${post.id}-${i}`}>
+            <Card>
+              <div className='reddit-container'>
+                <div className='reddit-header'>
+                  <span className='author'>{twitter ? post.user.screen_name : post.author}</span>
+                  <span className='points'>
+                    {twitter ? `${post.retweet_count} retweets` : `${post.score} points`}
+                    &nbsp;·&nbsp;
+                    {moment(twitter ? post.created_at : (post.created * 1000)).fromNow()}</span>
+                </div>
+                <Highlighter
+                  highlightClassName='highlight'
+                  searchWords={[selected]}
+                  textToHighlight={text} />
+                <div className='reddit-footer'>
+                  <span className='subreddit'>{post.subreddit_name_prefixed}</span>
+                  <div className={`logo ${type}`} />
+                </div>
+              </div>
+            </Card>
+          </a>
+        )
+      }));
     });
+
     return (
       <div className='card-container'>
         <Card>
           <div className='search-container'>
-            <input type='text' defaultValue={this.state.keyword} onChange={this.handleInputChange}
+            <div className='logo' />
+            <input type='text' value={this.state.keyword} onChange={this.handleInputChange}
                    onKeyPress={this.handleKeyPress} />
             <i className='fa fa-search' aria-hidden='true' onClick={this.handleSearchClick} />
           </div>
@@ -213,36 +302,61 @@ class App extends React.Component {
           }
         </div>
         {
-          loading &&
-          <Card>
-            <div className='loading-container'>
-              <i className='fa fa-spinner fa-spin' aria-hidden='true' />
-              <span>&nbsp;Loading...</span>
-            </div>
-          </Card>
+          data.length && data[0].keywords.length ?
+            <Card>
+              <div className='keyword-container'>
+                {
+                  data.map(({ keyword, color, keywords }, i) =>
+                    keywords.map((keyword, i) => {
+                      const hasColor = !selected || keyword === selected;
+                      return (
+                        <Card key={`${keyword}-${i}`}
+                              color={hasColor && color} white={hasColor}
+                              onClick={() => this.filter(keyword)}>
+                          {keyword}
+                        </Card>
+                      )
+                    })
+                  )
+                }
+              </div>
+            </Card> :
+            null
         }
         {
-          data.length ?
+          !selected && data.length ?
             Object.keys(data[0].chart)
               .map((category_name, i) => (
-                <Card key={`chart-${i}`} vertical>
-                  <h2>{category_name}</h2>
-                  <div className='chart-wrapper'>
-                    {
-                      <HorizontalBar data={{
-                        labels: data[0].chart[category_name].labels,
-                        datasets: data
-                          .filter(({ chart }) => Object.keys(chart).length)
-                          .map(({ keyword, chart, color }) => ({
-                            label: keyword,
-                            backgroundColor: color,
-                            data: chart[category_name].data
-                          }))
-                      }} />
-                    }
-                  </div>
-                </Card>
-              )) :
+                  <Card key={`chart-${i}`} vertical>
+                    <h2>{category_name}</h2>
+                    <div className='chart-wrapper'>
+                      {
+                        <HorizontalBar data={{
+                          labels: data[0].chart[category_name].labels,
+                          datasets: data
+                            .filter(({ chart }) => Object.keys(chart).length)
+                            .map(({ keyword, chart, color }) => ({
+                              label: keyword,
+                              backgroundColor: color,
+                              data: chart[category_name].data
+                            }))
+                        }} options={{
+                          scales: {
+                            xAxes: [{
+                              ticks: {
+                                beginAtZero: true,
+                                steps: 10,
+                                stepValue: .1,
+                                max: 1,
+                              }
+                            }]
+                          }
+                        }} />
+                      }
+                    </div>
+                  </ Card >
+                )
+              ) :
             null
         }
         {

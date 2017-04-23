@@ -22,7 +22,7 @@ module.exports = {
         use: 'babel-loader'
       },
       {
-        test: /\.sass$/,
+        test: /\.(sass|css)$/,
         include: SOURCE_DIR,
         use: DEBUG ?
           ['style-loader', 'css-loader', 'postcss-loader', 'sass-loader'] :
