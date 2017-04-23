@@ -2,36 +2,60 @@ import React from 'react';
 import '../stylesheet.sass';
 import Card from './Card.jsx';
 import reqwest from 'reqwest';
-import { HorizontalBar } from 'react-chartjs-2';
+import { HorizontalBar, defaults } from 'react-chartjs-2';
 import async from 'async';
+import extend from 'extend';
+
+defaults.global.legend.display = false;
 
 class App extends React.Component {
   constructor(props) {
     super(props);
 
-    this.state = {
+    this.initialState = {
       keyword: '',
-      tonesList: {},
       loading: false,
-      posts: null,
+      data: []
     };
     this.csv_data = undefined;
 
+    this.state = { ...this.initialState };
+
     this.handleInputChange = this.handleInputChange.bind(this);
     this.handleSearchClick = this.handleSearchClick.bind(this);
+    this.handleKeyPress = this.handleKeyPress.bind(this);
+    this.handleClearClick = this.handleClearClick.bind(this);
   }
 
   handleInputChange({ target }) {
     this.setState({ keyword: target.value });
   }
 
+  handleKeyPress({ key }) {
+    if (key === 'Enter') {
+      this.handleSearchClick();
+    }
+  }
+
   handleSearchClick() {
+    if (this.state.data.length > 5) return;
     const { keyword } = this.state;
-    const color = `hsl(${Math.random() * 360}, 50%, 50%)`;
-    this.setState({
-      loading: false,
-      posts: [],
-    });
+    let hue = null;
+    const hues = this.state.data.map(({ hue }) => hue);
+    do {
+      hue = Math.random() * 360;
+    } while (hues.some(v => Math.abs(hue - v) < 30));
+    const color = `hsl(${hue}, 50%, 50%)`;
+    this.setState((state) => ({
+      data: [...state.data, {
+        keyword,
+        hue,
+        color,
+        chart: {},
+        posts: [],
+      }],
+      loading: true,
+    }));
     async.waterfall([
       (cb) => {
         reqwest({
@@ -51,30 +75,21 @@ class App extends React.Component {
               type: 'json',
               data: { text },
               error: cb,
-              success: (body) => {
-                const { tone_categories } = body;
-                const tonesList = { ...this.state.tonesList };
-                tone_categories.forEach(({ tones, category_name }) => {
-                  if (!tonesList[category_name]) {
-                    tonesList[category_name] = {
-                      labels: [],
-                      datasets: [],
+              success: ({ tone_categories }) => {
+                this.setState((state) => {
+                  const data = [...state.data];
+                  const index = data.findIndex(o => o.keyword === keyword);
+                  if (!~index) return {};
+                  const datum = extend(true, {}, data[index]);
+                  data[index] = datum;
+                  tone_categories.forEach(({ tones, category_name }) => {
+                    datum.chart[category_name] = {
+                      labels: tones.map(({ tone_name }) => tone_name),
+                      data: tones.map(({ score }) => score),
                     };
-                    tones.forEach(({ tone_name }) => {
-                      tonesList[category_name].labels.push(tone_name);
-                    });
-                  }
-                  const dataset = {
-                    label: keyword,
-                    backgroundColor: color,
-                    data: [],
-                  };
-                  tones.forEach(({ score }) => {
-                    dataset.data.push(score);
                   });
-                  tonesList[category_name].datasets.push(dataset);
+                  return { data };
                 });
-                this.setState({ tonesList });
                 cb();
               },
             });
@@ -85,14 +100,15 @@ class App extends React.Component {
               type: 'jsonp',
               error: cb,
               success: ({ html }) => {
-                this.setState((state) => ({
-                  posts: [
-                    ...state.posts,
-                    <Card key={id_str}>
-                      <div dangerouslySetInnerHTML={{ __html: html }} />
-                    </Card>,
-                  ]
-                }));
+                this.setState((state) => {
+                  const data = [...state.data];
+                  const index = data.findIndex(o => o.keyword === keyword);
+                  if (!~index) return {};
+                  const datum = extend(true, {}, data[index]);
+                  data[index] = datum;
+                  datum.posts.push({ html, id_str });
+                  return { data };
+                });
                 cb();
               }
             });
@@ -102,6 +118,16 @@ class App extends React.Component {
     ], (err) => {
       this.setState({ loading: false });
     });
+  }
+
+  handleClearClick() {
+    this.setState({ data: [] });
+  }
+
+  remove(i) {
+    const data = [...this.state.data];
+    data.splice(i, 1);
+    this.setState({ data });
   }
 
   download(filename, text) {
@@ -138,15 +164,43 @@ class App extends React.Component {
   }
 
   render() {
-    const { tonesList, loading, posts } = this.state;
+    const { loading, data } = this.state;
+    const posts = [];
+    data.forEach((datum) => {
+      posts.push(...datum.posts.map(({ html, id_str }) => (
+        <Card key={id_str}>
+          <div dangerouslySetInnerHTML={{ __html: html }} />
+        </Card>
+      )));
+    });
     return (
       <div className="card-container">
         <Card>
           <div className="search-container">
-            <input type="text" defaultValue={this.state.keyword} onChange={this.handleInputChange} />
+            <input type="text" defaultValue={this.state.keyword} onChange={this.handleInputChange}
+                   onKeyPress={this.handleKeyPress} />
             <i className="fa fa-search" aria-hidden="true" onClick={this.handleSearchClick} />
           </div>
         </Card>
+        <div className="keyword-list">
+          {
+            data.length ?
+              <Card>
+                <div onClick={this.handleClearClick} className="clear-container">
+                  Clear
+                </div>
+              </Card> :
+              null
+          }
+          {
+            data.map(({ keyword, color }, i) => (
+              <Card key={`keyword-${i}`} color={color} white>
+                <div>{keyword}</div>
+                <i className="fa fa-times" aria-hidden="true" onClick={() => this.remove(i)} />
+              </Card>
+            ))
+          }
+        </div>
         {
           loading &&
           <Card>
@@ -157,15 +211,28 @@ class App extends React.Component {
           </Card>
         }
         {
-          tonesList &&
-          Object.keys(tonesList).map((category_name, i) => (
-            <Card key={i} vertical>
-              <h2>{category_name}</h2>
-              <div className="chart-wrapper">
-                <HorizontalBar data={tonesList[category_name]} />
-              </div>
-            </Card>
-          ))
+          data.length ?
+            Object.keys(data[0].chart)
+              .map((category_name, i) => (
+                <Card key={`chart-${i}`} vertical>
+                  <h2>{category_name}</h2>
+                  <div className="chart-wrapper">
+                    {
+                      <HorizontalBar data={{
+                        labels: data[0].chart[category_name].labels,
+                        datasets: data
+                          .filter(({ chart }) => Object.keys(chart).length)
+                          .map(({ keyword, chart, color }) => ({
+                            label: keyword,
+                            backgroundColor: color,
+                            data: chart[category_name].data
+                          }))
+                      }} />
+                    }
+                  </div>
+                </Card>
+              )) :
+            null
         }
         {
           Object.keys(this.state.tonesList).length==0||
@@ -176,7 +243,7 @@ class App extends React.Component {
           </Card>
         }
         {
-          this.state.posts
+          posts.reverse()
         }
       </div>
     );
