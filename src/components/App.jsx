@@ -168,10 +168,8 @@ class App extends React.Component {
       posts.push(...datum.posts.map(({ type, id_str, permalink, title, created }) => (
         type === 'twitter' ?
           <TweetEmbed id={id_str} key={id_str} /> : [
-          <blockquote className="reddit-card" data-card-created={created}>
-            <a href={permalink}>{title}</a> from <a
-            href="http://www.reddit.com/r/worldnews">worldnews</a></blockquote>,
-          <script async src="//embed.redditmedia.com/widgets/platform.js" charset="UTF-8"></script>
+          <Card><blockquote className="reddit-card" data-card-created={created}>
+            <a href={permalink}>{title}</a></blockquote></Card>
         ]
       )));
     });
