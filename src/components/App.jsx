@@ -168,9 +168,10 @@ class App extends React.Component {
           ))
         }
         {
+          Object.keys(this.state.tonesList).length==0||
           <Card>
             <div className="csv-container">
-              <a onClick={() => this.download("data.csv", this.generateCSV())}>data.csv</a>
+              <a onClick={() => this.download("data.csv", this.generateCSV())}>CSV</a>
             </div>
           </Card>
         }
